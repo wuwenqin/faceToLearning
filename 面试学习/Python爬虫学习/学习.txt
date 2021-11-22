@@ -1,0 +1,127 @@
+from googletrans import Translator
+import requests
+from requests.adapters import HTTPAdapter
+from bs4 import BeautifulSoup
+import re
+import pandas as pd
+from pandas import DataFrame
+
+headers={
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+    "Connection": "keep-alive",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
+
+# pd.set_option('display.height',1000)
+# pd.set_option('display.max_rows',500)
+# pd.set_option('display.max_columns',500)
+# pd.set_option('display.width',1000)
+pd.set_option('expand_frame_repr', True)
+
+sess=requests.Session()
+sess.mount('http://', HTTPAdapter(max_retries=3))
+sess.mount('https://', HTTPAdapter(max_retries=3))
+
+def Translate(text):
+    translator = Translator(service_urls=['translate.google.cn',])
+    trans=translator.translate(text, src='en', dest='zh-cn')
+    return trans.text
+
+def getText(url,timeout):
+    proxies = { "http": "http://127.0.0.1:10809", "https": "http://127.0.0.1:10809"}
+    # t=requests.get(url,proxies,timeout=5,headers=headers).text
+    try:
+        return sess.get(url,timeout=timeout,headers=headers).text
+    except:
+        pass
+    
+def saveJPG(url):
+    pass
+
+def getURL(html):
+    soup = BeautifulSoup(html, 'lxml')
+    text=soup.find('div',{"class":"documents-list","id":"documents"})
+    # print(text.text)
+    #保存所有url
+    all=[]
+    for x in range(0,94):
+        name=re.compile(r"document[ ]+document-position-%d[ ]+"%(x))
+        t=text.find('article',{"itemtype":"http://schema.org/Thing","class":name})
+        tt=t.find("header",{"class":re.compile(r"documentHeader[ ]*row")}).find("a")
+        all.append(tt.get("href"))
+        # print(tt.get("href"))
+    return all
+
+def getContext(html,filename):
+    soup = BeautifulSoup(html, 'lxml')
+    t=soup.find("div",{"class":re.compile(r"row[ ]*flex-column-reverse[ ]*flex-md-row")}).find("div",{"class":"col-md-7"}).find("dl",{"class":re.compile(r"row[ ]*dl-invert[ ]*document-metadata")})
+    dt=t
+    dd=t
+    en_context=""
+    cn_context=""
+    en_keyword=""
+    cn_keyword=""
+
+    flag="doc_"+filename.replace(":","-")
+    title=soup.find("div",{"id":flag}).find("h2",{"itemprop":"name"}).text
+    
+    en_context+=title+"\n\n"
+    cn_context+=Translate(title)+"\n\n"
+    
+    image_name=filename.replace(":","_")+".jpg"
+
+    while dt and dd:
+        dt=dt.find_next("dt")
+        dd=dd.find_next("dd")
+        if dt==None and dd==None:
+            break
+        if "Publication" in dt.text or "Language" in dt.text or "Format" in dt.text or "Subject" in dt.text or "Genre" in dt.text or "Abstract" in dt.text or "Contributor" in dt.text:
+            if "Subject" in dt.text:
+                en_keyword=dd.text
+                cn_keyword=Translate(dd.text.strip().replace("\n","，"))+"\n\n"
+                cn_context+=Translate(dt.text)+cn_keyword
+            else:
+                cn_context+=Translate(dt.text).replace("出版物：","出版：").replace("抽象：","摘要：")+Translate(dd.text.strip().replace("\n","，"))+"\n\n"
+            en_context+=dt.text+dd.text.strip().replace("\n",", ").replace("  ","")+"\n\n"
+    saveExcel("",image_name,en_context,cn_context,en_keyword,cn_keyword,"0000/00/00","","")
+
+def saveExcel(id,image_file,en_data,cn_data,en_keyword,cn_keyword,image_time,author,_id):
+    data={
+        "id（留空）":id,
+        "文件名":image_file,
+        "英文图片内容说明":en_data,
+        "图片说明":cn_data,
+        "英文关键字":en_keyword,
+        "中文关键字":cn_keyword,
+        "图片创作时间":image_time,
+        "图片作者署名":author,
+        "id(分库名)":_id
+    }
+
+    data = pd.DataFrame(data,index=[0])
+    df=pd.read_excel("./2.xlsx")
+    df = df.append(data)
+    df.to_excel("./2.xlsx", index=False)
+
+def getPage(url):
+    pass
+
+if "__main__"==__name__:
+    _url="https://collections.nlm.nih.gov"
+    text=getText("https://collections.nlm.nih.gov/?f%5Bdrep2.isMemberOfCollection%5D%5B%5D=DREPIHM&f%5Bdrep2.subjectAggregate%5D%5B%5D=Infant&page=2&per_page=100",50)
+    paths=getURL(text)
+    print(paths)
+    # paths=['/catalog/nlm:nlmuid-101597912-img', '/catalog/nlm:nlmuid-101598098-img', '/catalog/nlm:nlmuid-101404362-img', '/catalog/nlm:nlmuid-101436179-img', '/catalog/nlm:nlmuid-101436946-img', '/catalog/nlm:nlmuid-101436945-img', '/catalog/nlm:nlmuid-101436961-img', '/catalog/nlm:nlmuid-101437366-img', '/catalog/nlm:nlmuid-101437283-img', '/catalog/nlm:nlmuid-101442765-img', '/catalog/nlm:nlmuid-101442763-img', '/catalog/nlm:nlmuid-101446850-img', '/catalog/nlm:nlmuid-101447715-img', '/catalog/nlm:nlmuid-101392773-img', '/catalog/nlm:nlmuid-101393114-img', '/catalog/nlm:nlmuid-101393792-img', '/catalog/nlm:nlmuid-101438146-img', '/catalog/nlm:nlmuid-101438229-img', '/catalog/nlm:nlmuid-101438226-img', '/catalog/nlm:nlmuid-101438224-img', '/catalog/nlm:nlmuid-101438300-img', '/catalog/nlm:nlmuid-101438327-img', '/catalog/nlm:nlmuid-101438420-img', '/catalog/nlm:nlmuid-101438225-img', '/catalog/nlm:nlmuid-101438334-img', '/catalog/nlm:nlmuid-101438286-img', '/catalog/nlm:nlmuid-101438290-img', '/catalog/nlm:nlmuid-101438285-img', '/catalog/nlm:nlmuid-101438283-img', '/catalog/nlm:nlmuid-101438299-img', '/catalog/nlm:nlmuid-101438289-img', '/catalog/nlm:nlmuid-101438333-img', '/catalog/nlm:nlmuid-101438230-img', '/catalog/nlm:nlmuid-101438296-img', '/catalog/nlm:nlmuid-101438417-img', '/catalog/nlm:nlmuid-101438293-img', '/catalog/nlm:nlmuid-101438418-img', '/catalog/nlm:nlmuid-101438269-img', '/catalog/nlm:nlmuid-101438288-img', '/catalog/nlm:nlmuid-101438328-img', '/catalog/nlm:nlmuid-101438270-img', '/catalog/nlm:nlmuid-101438416-img', '/catalog/nlm:nlmuid-101438228-img', '/catalog/nlm:nlmuid-101438227-img', '/catalog/nlm:nlmuid-101439296-img', '/catalog/nlm:nlmuid-101438284-img', '/catalog/nlm:nlmuid-101438297-img', '/catalog/nlm:nlmuid-101438231-img', '/catalog/nlm:nlmuid-101438287-img', '/catalog/nlm:nlmuid-101438223-img', '/catalog/nlm:nlmuid-101438234-img', '/catalog/nlm:nlmuid-101438298-img', '/catalog/nlm:nlmuid-101438419-img', '/catalog/nlm:nlmuid-101438400-img', '/catalog/nlm:nlmuid-101439183-img', '/catalog/nlm:nlmuid-101439338-img', '/catalog/nlm:nlmuid-101439410-img', '/catalog/nlm:nlmuid-101439488-img', '/catalog/nlm:nlmuid-101439442-img', '/catalog/nlm:nlmuid-101447863-img', '/catalog/nlm:nlmuid-101447801-img', '/catalog/nlm:nlmuid-101447802-img', '/catalog/nlm:nlmuid-101448527-img', '/catalog/nlm:nlmuid-101448528-img', '/catalog/nlm:nlmuid-101448379-img', '/catalog/nlm:nlmuid-101448497-img', '/catalog/nlm:nlmuid-101448509-img', '/catalog/nlm:nlmuid-101448508-img', '/catalog/nlm:nlmuid-101448378-img', '/catalog/nlm:nlmuid-101448500-img', '/catalog/nlm:nlmuid-101448499-img', '/catalog/nlm:nlmuid-101448516-img', '/catalog/nlm:nlmuid-101448377-img', '/catalog/nlm:nlmuid-101448519-img', '/catalog/nlm:nlmuid-101448515-img', '/catalog/nlm:nlmuid-101448517-img', '/catalog/nlm:nlmuid-101448506-img', '/catalog/nlm:nlmuid-101448498-img', '/catalog/nlm:nlmuid-101448507-img', '/catalog/nlm:nlmuid-101448514-img', '/catalog/nlm:nlmuid-101448529-img', '/catalog/nlm:nlmuid-101448518-img', '/catalog/nlm:nlmuid-101448496-img', '/catalog/nlm:nlmuid-101448526-img', '/catalog/nlm:nlmuid-101448736-img', '/catalog/nlm:nlmuid-101448735-img', '/catalog/nlm:nlmuid-101448989-img', '/catalog/nlm:nlmuid-101448326-img', '/catalog/nlm:nlmuid-101448335-img', '/catalog/nlm:nlmuid-101448513-img', '/catalog/nlm:nlmuid-101448729-img', '/catalog/nlm:nlmuid-101448330-img', '/catalog/nlm:nlmuid-101448329-img', '/catalog/nlm:nlmuid-101449268-img', '/catalog/nlm:nlmuid-101448354-img', '/catalog/nlm:nlmuid-101448362-img', '/catalog/nlm:nlmuid-101448361-img', '/catalog/nlm:nlmuid-101448365-img', '/catalog/nlm:nlmuid-101448364-img', '/catalog/nlm:nlmuid-101448371-img']
+    i=0
+    for path in paths:
+        filename=path.split("/")[-1]
+        i+=1
+        url=_url+path
+        try:
+            getContext(getText(url,5),filename)
+            print(i,path,"保存成功")
+        except Exception as e:
+            print(e)
+            print(i,path,"出现异常")
