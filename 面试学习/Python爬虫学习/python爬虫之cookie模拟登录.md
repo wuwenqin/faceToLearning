@@ -119,7 +119,7 @@ proxy=random.choice(proxie_list)#随机抽取一个ip来进行访问url
 
 ​		需要使用超级鹰来进行验证码识别，并使用Session存储登录状态，当进入个人主页时即可使用当前的Cookie模拟登录。
 
-```java
+```python
 #!/usr/bin/env python
 # coding:utf-8
 
